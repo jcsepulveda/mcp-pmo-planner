@@ -1,0 +1,14 @@
+# Environment variables & secrets
+.env
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS files
+.DS_Store
+*.swp
+
+# Python distribution / packaging
+*.egg-info/
