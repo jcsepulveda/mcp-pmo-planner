@@ -338,11 +338,12 @@ class PlannerService:
         import datetime
         from collections import defaultdict
         
-        # 1. Definir rango del horizonte temporal (Año de referencia: 2026)
-        year = 2026
+        # 1. Definir rango del horizonte temporal basado en hoy (Año corrido para Anual)
+        today = datetime.date.today()
+        year = today.year
         if horizon == "Anual":
-            range_start = datetime.date(year, 1, 1)
-            range_end = datetime.date(year, 12, 31)
+            range_start = today
+            range_end = today + datetime.timedelta(days=365)
         elif horizon == "Semestre 1 (S1)":
             range_start = datetime.date(year, 1, 1)
             range_end = datetime.date(year, 6, 30)
