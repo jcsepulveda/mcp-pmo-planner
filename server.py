@@ -188,6 +188,71 @@ def get_workload_summary(group_id: Optional[str] = None) -> Dict[str, Any]:
             "message": str(e)
         }
 
+
+@mcp.tool()
+def get_portfolio_macro_roadmap(
+    catalog_data: dict,
+    config_data: dict,
+    horizon: Optional[str] = "Anual",
+    group_by: Optional[str] = "Tipo de Proyecto",
+    group_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Analiza el portafolio unificado, cruzando las iniciativas del grupo con el catálogo
+    y la configuración corporativa para generar el roadmap macro, densidad de cierres y colisiones.
+    
+    Args:
+        catalog_data: Datos del catálogo de proyectos (mapeados por ID).
+        config_data: Configuración que incluye las fechas_criticas corporativas.
+        horizon: Horizonte temporal (Anual, Semestre 1 (S1), Semestre 2 (S2), etc.).
+        group_by: Criterio de agrupación para swimlanes (Tipo de Proyecto, Jefe de Proyecto, Gobierno).
+        group_id: (Opcional) ID del grupo a consultar para obtener la lista de planes activa.
+    """
+    try:
+        logger.info(f"MCP get_portfolio_macro_roadmap invocado con horizonte={horizon}, agrupado por={group_by}")
+        plans = PlannerService.list_plans(group_id)
+        res = PlannerService.calculate_macro_roadmap_data(plans, catalog_data, config_data, horizon, group_by)
+        
+        # Serializar fechas para retorno JSON
+        projects_serializable = []
+        for p in res["projects"]:
+            projects_serializable.append({
+                "id": p["id"],
+                "nombre": p["nombre"],
+                "start": p["start"].strftime("%Y-%m-%d"),
+                "finish": p["finish"].strftime("%Y-%m-%d"),
+                "pm": p["pm"],
+                "tipo": p["tipo"],
+                "gobierno": p["gobierno"],
+                "swimlane": p["swimlane"],
+                "colisiones_fc": p["colisiones_fc"],
+                "score": p["score"]
+            })
+            
+        fechas_criticas_serializable = []
+        for fc in res["fechas_criticas"]:
+            fechas_criticas_serializable.append({
+                "nombre": fc["nombre"],
+                "fecha_inicio": fc["start"].strftime("%Y-%m-%d"),
+                "fecha_fin": fc["finish"].strftime("%Y-%m-%d"),
+                "color": fc["color"],
+                "tipo": fc["tipo"]
+            })
+
+        return {
+            "status": "success",
+            "projects": projects_serializable,
+            "fechas_criticas": fechas_criticas_serializable,
+            "alertas": res["alertas"],
+            "congestion": res["congestion"]
+        }
+    except Exception as e:
+        logger.error(f"Error en get_portfolio_macro_roadmap: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 @mcp.resource("planner://authorized-group/configuration")
 def get_authorized_config() -> str:
     """Retorna información descriptiva del grupo de trabajo y su ID blindado en el servidor."""

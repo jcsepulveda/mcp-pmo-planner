@@ -281,3 +281,204 @@ class PlannerService:
             },
             "tasks": formatted_tasks
         }
+
+    @classmethod
+    def resolve_project_dates(cls, proj: dict, cat_entry: dict) -> tuple:
+        """
+        Determina de forma segura las fechas de inicio y término de un proyecto.
+        """
+        import datetime
+        start_str = cat_entry.get("fecha_inicio")
+        finish_str = cat_entry.get("fecha_fin")
+        
+        start_dt = None
+        finish_dt = None
+        
+        if start_str:
+            try:
+                start_dt = datetime.datetime.strptime(start_str, "%Y-%m-%d").date()
+            except Exception:
+                pass
+        if finish_str:
+            try:
+                finish_dt = datetime.datetime.strptime(finish_str, "%Y-%m-%d").date()
+            except Exception:
+                pass
+                
+        # Fallback a Planner/Dataverse
+        if not start_dt:
+            s = proj.get("start") or proj.get("start_date")
+            if s and s != '-':
+                try:
+                    start_dt = datetime.datetime.strptime(s[:10], "%Y-%m-%d").date()
+                except Exception:
+                    pass
+        if not finish_dt:
+            f = proj.get("finish") or proj.get("finish_date")
+            if f and f != '-':
+                try:
+                    finish_dt = datetime.datetime.strptime(f[:10], "%Y-%m-%d").date()
+                except Exception:
+                    pass
+                    
+        # Fallback por defecto si todo lo demás falla
+        if not start_dt:
+            start_dt = datetime.date(2026, 1, 1)
+        if not finish_dt:
+            finish_dt = datetime.date(2026, 12, 31)
+            
+        return start_dt, finish_dt
+
+    @classmethod
+    def calculate_macro_roadmap_data(cls, projects: list, catalog: dict, config: dict, horizon: str = "Anual", group_by: str = "Tipo de Proyecto") -> dict:
+        """
+        Procesa los proyectos para generar el Roadmap Macro, el Heatmap de Congestión y Alertas de Colisión.
+        """
+        import datetime
+        from collections import defaultdict
+        
+        # 1. Definir rango del horizonte temporal (Año de referencia: 2026)
+        year = 2026
+        if horizon == "Anual":
+            range_start = datetime.date(year, 1, 1)
+            range_end = datetime.date(year, 12, 31)
+        elif horizon == "Semestre 1 (S1)":
+            range_start = datetime.date(year, 1, 1)
+            range_end = datetime.date(year, 6, 30)
+        elif horizon == "Semestre 2 (S2)":
+            range_start = datetime.date(year, 7, 1)
+            range_end = datetime.date(year, 12, 31)
+        elif horizon == "Trimestre 1 (Q1)":
+            range_start = datetime.date(year, 1, 1)
+            range_end = datetime.date(year, 3, 31)
+        elif horizon == "Trimestre 2 (Q2)":
+            range_start = datetime.date(year, 4, 1)
+            range_end = datetime.date(year, 6, 30)
+        elif horizon == "Trimestre 3 (Q3)":
+            range_start = datetime.date(year, 7, 1)
+            range_end = datetime.date(year, 9, 30)
+        elif horizon == "Trimestre 4 (Q4)":
+            range_start = datetime.date(year, 10, 1)
+            range_end = datetime.date(year, 12, 31)
+        else: # Todos
+            range_start = None
+            range_end = None
+
+        processed_projects = []
+        fechas_criticas = config.get("fechas_criticas", [])
+        
+        # Convertir fechas críticas de config a objetos datetime.date
+        criticas_parsed = []
+        for fc in fechas_criticas:
+            try:
+                s_dt = datetime.datetime.strptime(fc["fecha_inicio"], "%Y-%m-%d").date()
+                f_dt = datetime.datetime.strptime(fc["fecha_fin"], "%Y-%m-%d").date()
+                criticas_parsed.append({
+                    "nombre": fc["nombre"],
+                    "start": s_dt,
+                    "finish": f_dt,
+                    "color": fc.get("color", "#ef4444"),
+                    "tipo": fc.get("tipo", "General")
+                })
+            except Exception:
+                pass
+
+        # 2. Procesar y filtrar proyectos
+        for proj in projects:
+            pid = proj.get("id")
+            cat_entry = catalog.get(pid, {})
+            
+            p_start, p_finish = cls.resolve_project_dates(proj, cat_entry)
+            
+            # Filtrar por horizonte temporal (si se solapa con el rango)
+            if range_start and range_end:
+                if p_finish < range_start or p_start > range_end:
+                    continue # Proyecto fuera del horizonte temporal
+
+            pm = cat_entry.get("pm_responsable", "Sin Asignar") or "Sin Asignar"
+            tipo = cat_entry.get("tipo_proyecto", "De Unidad")
+            gobierno = cat_entry.get("gobierno", "Seguimiento de Jefatura")
+            
+            # Resolver Swimlane de agrupación
+            if group_by == "Jefe de Proyecto":
+                swimlane = pm
+            elif group_by == "Gobierno":
+                swimlane = gobierno
+            else:
+                swimlane = tipo
+
+            # Calcular colisiones del término del proyecto con las fechas críticas
+            colisiones_fc = []
+            for fc in criticas_parsed:
+                # El proyecto termina dentro de la fecha crítica o tiene intersección con ella
+                if fc["start"] <= p_finish <= fc["finish"]:
+                    colisiones_fc.append(fc["nombre"])
+
+            processed_projects.append({
+                "id": pid,
+                "nombre": cat_entry.get("nombre_oficial", proj.get("name")),
+                "start": p_start,
+                "finish": p_finish,
+                "pm": pm,
+                "tipo": tipo,
+                "gobierno": gobierno,
+                "swimlane": swimlane,
+                "colisiones_fc": colisiones_fc,
+                "score": cat_entry.get("score", 4)
+            })
+
+        # 3. Detectar colisiones por proximidad (cierres simultáneos de un mismo PM)
+        projs_by_pm = defaultdict(list)
+        for p in processed_projects:
+            if p["pm"] != "Sin Asignar":
+                projs_by_pm[p["pm"]].append(p)
+                
+        alertas = []
+        for pm_name, p_list in projs_by_pm.items():
+            for i in range(len(p_list)):
+                for j in range(i + 1, len(p_list)):
+                    p1 = p_list[i]
+                    p2 = p_list[j]
+                    
+                    diff = abs((p1["finish"] - p2["finish"]).days)
+                    if diff <= 10:
+                        alertas.append({
+                            "tipo": "cierres_simultaneos",
+                            "pm": pm_name,
+                            "proyecto1": p1["nombre"],
+                            "proyecto2": p2["nombre"],
+                            "dias_diferencia": diff,
+                            "mensaje": f"⚠️ **Cierres Simultáneos:** El PM **{pm_name}** tiene asignados los proyectos **{p1['nombre']}** y **{p2['nombre']}** que finalizan con solo {diff} días de diferencia."
+                        })
+
+        # Registrar alertas de choque con fechas críticas
+        for p in processed_projects:
+            for col_fc in p["colisiones_fc"]:
+                alertas.append({
+                    "tipo": "choque_fecha_critica",
+                    "proyecto": p["nombre"],
+                    "fecha_critica": col_fc,
+                    "fecha_termino": p["finish"].strftime("%Y-%m-%d"),
+                    "mensaje": f"🚨 **Conflicto Corporativo:** El proyecto **{p['nombre']}** finaliza el {p['finish'].strftime('%Y-%m-%d')} durante la ventana de riesgo **'{col_fc}'**."
+                })
+
+        # 4. Calcular congestión de cierres (conteo de finalizaciones de proyectos por mes en el año 2026)
+        congestion_mensual = defaultdict(int)
+        for m in range(1, 13):
+            congestion_mensual[f"2026-{m:02d}"] = 0
+            
+        for p in processed_projects:
+            p_finish = p["finish"]
+            if p_finish.year == 2026:
+                key = f"2026-{p_finish.month:02d}"
+                congestion_mensual[key] += 1
+
+        congestions = [{"mes": k, "cantidad": v} for k, v in sorted(congestion_mensual.items())]
+
+        return {
+            "projects": processed_projects,
+            "fechas_criticas": criticas_parsed,
+            "alertas": alertas,
+            "congestion": congestions
+        }
+
