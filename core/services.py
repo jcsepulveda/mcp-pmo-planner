@@ -321,11 +321,12 @@ class PlannerService:
                 except Exception:
                     pass
                     
-        # Fallback por defecto si todo lo demás falla
+        # Fallback dinámico estimando por duración en meses del catálogo
         if not start_dt:
             start_dt = datetime.date(2026, 1, 1)
         if not finish_dt:
-            finish_dt = datetime.date(2026, 12, 31)
+            dur_meses = cat_entry.get("duracion_meses", 3) or 3
+            finish_dt = start_dt + datetime.timedelta(days=int(dur_meses * 30.4))
             
         return start_dt, finish_dt
 
