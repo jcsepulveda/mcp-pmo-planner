@@ -144,9 +144,47 @@ class PlannerService:
                 tipo_plan = "Standard"
 
         if tipo_plan == "Premium":
-            return cls._get_premium_plan_details(plan_id)
+            details = cls._get_premium_plan_details(plan_id)
         else:
-            return cls._get_standard_plan_details(plan_id)
+            details = cls._get_standard_plan_details(plan_id)
+
+        # Enriquecer con la lógica analítica de avance esperado y real ponderado
+        try:
+            from core.avance_esperado import compute_plan_metrics, chile_holidays_2026
+            metrics = compute_plan_metrics(details["tasks"], holidays=chile_holidays_2026())
+            
+            # Enriquecer metadata del proyecto
+            details["project"]["avance_real_ponderado"] = metrics.get("avance_real_ponderado", 0.0)
+            details["project"]["avance_esperado"] = metrics.get("avance_esperado", 0.0)
+            details["project"]["delta"] = metrics.get("delta", 0.0)
+            details["project"]["semaforo"] = metrics.get("semaforo", "verde")
+            details["project"]["fecha_referencia"] = metrics.get("fecha_referencia", "")
+
+            # Enriquecer cada tarea individual
+            task_metrics = metrics["tareas"]
+            if len(task_metrics) == len(details["tasks"]):
+                for idx, t in enumerate(details["tasks"]):
+                    m = task_metrics[idx]
+                    t["peso_dias_habiles"] = m["peso_dias_habiles"]
+                    t["avance_real_ponderado"] = m["avance_real"]
+                    t["avance_esperado"] = m["avance_esperado"]
+                    t["delta"] = m["delta"]
+            else:
+                metrics_map = {(m["nombre"], m["nivel"]): m for m in task_metrics}
+                for t in details["tasks"]:
+                    key = (t["name"], t["outline_level"])
+                    if key in metrics_map:
+                        m = metrics_map[key]
+                        t["peso_dias_habiles"] = m["peso_dias_habiles"]
+                        t["avance_real_ponderado"] = m["avance_real"]
+                        t["avance_esperado"] = m["avance_esperado"]
+                        t["delta"] = m["delta"]
+        except Exception as e:
+            # Tolerancia a fallos: registrar advertencia pero no interrumpir la ejecución principal
+            import logging
+            logging.getLogger("pmo-planner").warning(f"No se pudo enriquecer plan {plan_id} con avance esperado: {e}")
+
+        return details
 
     @classmethod
     def _get_standard_plan_details(cls, plan_id: str) -> dict:

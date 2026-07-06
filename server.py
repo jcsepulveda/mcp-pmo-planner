@@ -79,6 +79,46 @@ def get_plan_detailed_wbs(plan_id: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
+def get_plan_health_metrics(plan_id: str) -> Dict[str, Any]:
+    """
+    Retorna únicamente los indicadores clave de salud (Avance Real Ponderado,
+    Avance Esperado, Delta y Semáforo) de un plan/proyecto específico.
+    
+    Args:
+        plan_id: UUID o identificador único del plan/proyecto.
+    """
+    try:
+        logger.info(f"MCP get_plan_health_metrics invocado para plan: {plan_id}")
+        details = PlannerService.get_plan_details(plan_id)
+        proj = details.get("project", {})
+        
+        return {
+            "status": "success",
+            "plan_id": plan_id,
+            "name": proj.get("name"),
+            "tipo": proj.get("tipo"),
+            "pm_responsable": proj.get("pm_responsable"),
+            "avance_real_simple": proj.get("progress"),
+            "avance_real_ponderado": proj.get("avance_real_ponderado", proj.get("progress")),
+            "avance_esperado": proj.get("avance_esperado", 0.0),
+            "delta": proj.get("delta", 0.0),
+            "semaforo": proj.get("semaforo", "verde"),
+            "fecha_referencia": proj.get("fecha_referencia")
+        }
+    except SecurityException as se:
+        logger.warning(f"Intento de violación de seguridad: {se}")
+        return {
+            "status": "security_error",
+            "message": str(se)
+        }
+    except Exception as e:
+        logger.error(f"Error en get_plan_health_metrics: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@mcp.tool()
 def get_overdue_tasks(group_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Escanea todos los planes del grupo y extrae únicamente las tareas que ya vencieron

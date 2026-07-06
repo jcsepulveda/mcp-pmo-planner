@@ -193,10 +193,14 @@ def main():
                 print(f"\nPROYECTO: {proj['name']} ({proj['tipo']})")
                 print(f"ID:       {proj['id']}")
                 print(f"PM:       {proj.get('pm_responsable', 'Sin Asignar')}")
-                print(f"Avance:   {proj['progress']:.1f}%")
+                print(f"Avance Real Simple: {proj['progress']:.1f}%")
+                if "avance_real_ponderado" in proj:
+                    print(f"Avance Real Ponderado (WBS): {proj['avance_real_ponderado']:.1f}%")
+                    print(f"Avance Esperado:             {proj['avance_esperado']:.1f}%")
+                    print(f"Desviación (Delta):          {proj['delta']:.1f}% ({proj['semaforo'].upper()})")
                 print(f"Fechas:   Inicio: {proj.get('start_date') or '-'} | Fin: {proj.get('finish_date') or '-'}\n")
                 
-                headers = ["SEQ", "NIVEL", "TAREA", "INICIO", "VENCE", "AVANCE", "PREDECESORES"]
+                headers = ["SEQ", "NIVEL", "TAREA", "INICIO", "VENCE", "AV. REAL", "PESO (DÍAS)", "AV. ESP.", "PREDECESORES"]
                 rows = []
                 for t in results_data["tasks"]:
                     indent = "  " * (t["outline_level"] - 1)
@@ -204,6 +208,9 @@ def main():
                     if len(task_display) > 40:
                         task_display = task_display[:37] + "..."
                         
+                    peso_val = t.get("peso_dias_habiles", "-")
+                    esp_val = f"{t['avance_esperado']:.0f}%" if "avance_esperado" in t else "-"
+
                     rows.append([
                         t["seq"],
                         t["outline_level"],
@@ -211,6 +218,8 @@ def main():
                         t["start"],
                         t["finish"],
                         f"{t['progress_percent']:.0f}%",
+                        peso_val,
+                        esp_val,
                         ", ".join(t["predecessors"]) if t["predecessors"] else "-"
                     ])
                 print_table(headers, rows)
