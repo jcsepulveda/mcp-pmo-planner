@@ -261,6 +261,8 @@ def get_portfolio_macro_roadmap(
                 "nombre": p["nombre"],
                 "start": p["start"].strftime("%Y-%m-%d"),
                 "finish": p["finish"].strftime("%Y-%m-%d"),
+                "planned_finish": p["planned_finish"].strftime("%Y-%m-%d"),
+                "en_retraso": p["en_retraso"],
                 "pm": p["pm"],
                 "tipo": p["tipo"],
                 "gobierno": p["gobierno"],

@@ -321,9 +321,10 @@ class PlannerService:
         }
 
     @classmethod
-    def resolve_project_dates(cls, proj: dict, cat_entry: dict) -> tuple:
+    def resolve_project_dates(cls, proj: dict, cat_entry: dict, config: dict = None) -> tuple:
         """
-        Determina de forma segura las fechas de inicio y término de un proyecto.
+        Determina de forma segura las fechas de inicio, término planificado y término efectivo/proyectado.
+        Retorna (start_dt, planned_finish_dt, effective_finish_dt)
         """
         import datetime
         start_str = cat_entry.get("fecha_inicio")
@@ -366,7 +367,29 @@ class PlannerService:
             dur_meses = cat_entry.get("duracion_meses", 3) or 3
             finish_dt = start_dt + datetime.timedelta(days=int(dur_meses * 30.4))
             
-        return start_dt, finish_dt
+        # Calcular fecha efectiva/proyectada
+        # 1. Intentar usar la fecha de término proyectada manual del catálogo
+        fecha_fin_proyectada_str = cat_entry.get("fecha_fin_proyectada")
+        effective_finish_dt = None
+        if fecha_fin_proyectada_str:
+            try:
+                effective_finish_dt = datetime.datetime.strptime(fecha_fin_proyectada_str, "%Y-%m-%d").date()
+            except Exception:
+                pass
+        # 2. Si no hay fecha manual y el proyecto está activo e incompleto (< 100% avance)
+        # y la fecha planificada ya venció, aplicar la holgura parametrizada.
+        if not effective_finish_dt:
+            progress = proj.get("progress") or 0.0
+            today = datetime.date.today()
+            if progress < 100.0 and finish_dt < today:
+                dias_holgura = 14
+                if config:
+                    dias_holgura = config.get("governance_thresholds", {}).get("dias_holgura_retraso", 14)
+                effective_finish_dt = today + datetime.timedelta(days=int(dias_holgura))
+            else:
+                effective_finish_dt = finish_dt
+
+        return start_dt, finish_dt, effective_finish_dt
 
     @classmethod
     def calculate_macro_roadmap_data(cls, projects: list, catalog: dict, config: dict, horizon: str = "Anual", group_by: str = "Tipo de Proyecto") -> dict:
@@ -428,14 +451,14 @@ class PlannerService:
             pid = proj.get("id")
             cat_entry = catalog.get(pid, {})
             
-            p_start, p_finish = cls.resolve_project_dates(proj, cat_entry)
+            p_start, p_planned_finish, p_effective_finish = cls.resolve_project_dates(proj, cat_entry, config)
             
-            # Filtrar por horizonte temporal (si se solapa con el rango)
+            # Filtrar por horizonte temporal (si se solapa con el rango) usando la fecha efectiva/proyectada
             if range_start and range_end:
-                if p_finish < range_start or p_start > range_end:
+                if p_effective_finish < range_start or p_start > range_end:
                     continue # Proyecto fuera del horizonte temporal
 
-            pm = cat_entry.get("pm_responsable", "Sin Asignar") or "Sin Asignar"
+            pm = cat_entry.get("pm_responsable") or proj.get("pm_responsable") or "Sin Asignar"
             tipo = cat_entry.get("tipo_proyecto", "De Unidad")
             gobierno = cat_entry.get("gobierno", "Seguimiento de Jefatura")
             
@@ -447,18 +470,24 @@ class PlannerService:
             else:
                 swimlane = tipo
 
-            # Calcular colisiones del término del proyecto con las fechas críticas
+            # Calcular colisiones del término del proyecto con las fechas críticas usando la fecha efectiva/proyectada
             colisiones_fc = []
             for fc in criticas_parsed:
-                # El proyecto termina dentro de la fecha crítica o tiene intersección con ella
-                if fc["start"] <= p_finish <= fc["finish"]:
+                if fc["start"] <= p_effective_finish <= fc["finish"]:
                     colisiones_fc.append(fc["nombre"])
+
+            # Flag para indicar si el proyecto está vencido y activo
+            today = datetime.date.today()
+            progress = proj.get("progress") or 0.0
+            en_retraso = (progress < 100.0 and p_planned_finish < today)
 
             processed_projects.append({
                 "id": pid,
                 "nombre": cat_entry.get("nombre_oficial", proj.get("name")),
                 "start": p_start,
-                "finish": p_finish,
+                "finish": p_effective_finish,
+                "planned_finish": p_planned_finish,
+                "en_retraso": en_retraso,
                 "pm": pm,
                 "tipo": tipo,
                 "gobierno": gobierno,
