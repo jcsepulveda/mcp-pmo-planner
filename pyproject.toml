@@ -8,7 +8,6 @@ version = "0.1.0"
 description = "Motor unificado e híbrido para Microsoft Planner y Dataverse"
 authors = [{name = "Juan Carlos Sepulveda"}]
 dependencies = [
-    "requests>=2.28.0",
-    "python-dotenv>=1.0.0",
-    "urllib3>=1.26.0"
+    "mcp>=0.1.0",
+    "python-dotenv>=1.0.0"
 ]
