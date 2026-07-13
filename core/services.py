@@ -73,7 +73,9 @@ class PlannerService:
                     "start_date": None,
                     "finish_date": None,
                     "pm_responsable": default_pm,
-                    "group_id": "PROTECTED_TENANT_GROUP"
+                    "group_id": "PROTECTED_TENANT_GROUP",
+                    "estado_nativo": "Active",
+                    "estado_base": "En Curso"
                 })
         except Exception as e:
             # Toleramos que falle si no hay permisos de Graph, pero lo registramos
@@ -90,7 +92,7 @@ class PlannerService:
                 # Buscamos proyectos en Dataverse asignados a ese equipo
                 projects = DataverseClient.get(
                     "msdyn_projects", 
-                    {"$filter": f"_ownerid_value eq {team_id}", "$select": "msdyn_projectid,msdyn_subject,msdyn_progress,msdyn_scheduledstart,msdyn_finish,_createdby_value,_msdyn_projectmanager_value"}, 
+                    {"$filter": f"_ownerid_value eq {team_id}", "$select": "msdyn_projectid,msdyn_subject,msdyn_progress,msdyn_scheduledstart,msdyn_finish,_createdby_value,_msdyn_projectmanager_value,statecode,statuscode"}, 
                     get_all=True
                 )
                 for p in projects:
@@ -104,15 +106,52 @@ class PlannerService:
                     if start: start = start.split('T')[0]
                     if finish: finish = finish.split('T')[0]
 
+                    state_code = p.get("statecode")
+                    status_code = p.get("statuscode")
+                    progress_val = (p.get("msdyn_progress") or 0.0) * 100
+
+                    # Resolve Native Status Name
+                    estado_nativo = "Activo"
+                    if state_code == 1:
+                        estado_nativo = "Inactivo"
+                    if status_code == 2:
+                        estado_nativo = "Cerrado"
+                    elif status_code == 3:
+                        estado_nativo = "Inactivo"
+
+                    # Resolve Base State
+                    import datetime
+                    today = datetime.date.today()
+                    
+                    if state_code == 1 or status_code == 2 or progress_val >= 100.0:
+                        estado_base = "Finalizado"
+                    elif progress_val == 0.0:
+                        is_future = False
+                        if start:
+                            try:
+                                start_dt = datetime.datetime.strptime(start[:10], "%Y-%m-%d").date()
+                                if start_dt > today:
+                                    is_future = True
+                            except Exception:
+                                pass
+                        if is_future:
+                            estado_base = "No Iniciado"
+                        else:
+                            estado_base = "En Curso"
+                    else:
+                        estado_base = "En Curso"
+
                     plans.append({
                         "id": p.get("msdyn_projectid"),
                         "name": p.get("msdyn_subject"),
                         "tipo": "Premium",
-                        "progress": (p.get("msdyn_progress") or 0.0) * 100,
+                        "progress": progress_val,
                         "start_date": start,
                         "finish_date": finish,
                         "pm_responsable": pm_name,
-                        "group_id": "PROTECTED_TENANT_GROUP"
+                        "group_id": "PROTECTED_TENANT_GROUP",
+                        "estado_nativo": estado_nativo,
+                        "estado_base": estado_base
                     })
         except Exception as e:
             print(f"[Aviso] No se pudieron obtener planes de Dataverse: {e}", file=sys.stderr)

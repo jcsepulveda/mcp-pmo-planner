@@ -111,7 +111,7 @@ Añadir al bloque `"mcp"` de `~/.config/opencode/opencode.json`:
 ```
 
 ### Herramientas Disponibles
-* `list_authorized_plans`: Lista los planes autorizados del grupo.
+* `list_authorized_plans`: Lista los planes autorizados del grupo, enriquecidos ahora con `estado_base` (`No Iniciado`, `En Curso`, `Finalizado`) y `estado_nativo` (obtenido directamente a través de `statecode`/`statuscode` desde Dataverse para proyectos Premium, o "Active" para Standard).
 * `get_plan_detailed_wbs`: Obtiene tareas, dependencias, avances y personas asignadas de un plan.
 * `get_overdue_tasks`: Escanea tareas vencidas.
 * `get_workload_summary`: Calcula la carga de trabajo de tareas activas por persona asignada.
