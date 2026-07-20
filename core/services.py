@@ -520,6 +520,11 @@ class PlannerService:
             progress = proj.get("progress") or 0.0
             en_retraso = (progress < 100.0 and p_planned_finish < today)
 
+            estado_manual = cat_entry.get("estado_manual", "Auto")
+            estado_base = proj.get("estado_base", "En Curso")
+            estado = estado_manual if (estado_manual and estado_manual != "Auto") else estado_base
+            fase_actual = cat_entry.get("fase_actual", "Desarrollo / Ejecución")
+
             processed_projects.append({
                 "id": pid,
                 "nombre": cat_entry.get("nombre_oficial", proj.get("name")),
@@ -532,7 +537,10 @@ class PlannerService:
                 "gobierno": gobierno,
                 "swimlane": swimlane,
                 "colisiones_fc": colisiones_fc,
-                "score": cat_entry.get("score", 4)
+                "score": cat_entry.get("score", 4),
+                "estado": estado,
+                "progress": progress,
+                "fase_actual": fase_actual
             })
 
         # 3. Detectar colisiones por proximidad (cierres simultáneos de un mismo PM)
