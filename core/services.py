@@ -421,10 +421,19 @@ class PlannerService:
             progress = proj.get("progress") or 0.0
             today = datetime.date.today()
             if progress < 100.0 and finish_dt < today:
-                dias_holgura = 14
+                # Proyección ETC (Estimate to Complete): estimar tiempo restante
+                # proporcionalmente a la duración original y el avance actual.
+                total_duration_days = (finish_dt - start_dt).days
+                dias_holgura_min = 14
                 if config:
-                    dias_holgura = config.get("governance_thresholds", {}).get("dias_holgura_retraso", 14)
-                effective_finish_dt = today + datetime.timedelta(days=int(dias_holgura))
+                    dias_holgura_min = config.get("governance_thresholds", {}).get("dias_holgura_retraso", 14)
+                if progress > 0:
+                    remaining_ratio = (100.0 - progress) / 100.0
+                    remaining_days = max(dias_holgura_min, int(total_duration_days * remaining_ratio))
+                else:
+                    # Sin avance reportado: usar duración original completa o mínimo 60 días
+                    remaining_days = max(60, total_duration_days)
+                effective_finish_dt = today + datetime.timedelta(days=remaining_days)
             else:
                 effective_finish_dt = finish_dt
 
@@ -544,8 +553,10 @@ class PlannerService:
             })
 
         # 3. Detectar colisiones por proximidad (cierres simultáneos de un mismo PM)
+        # Solo considerar proyectos activos ("En Curso") para alertas operativas
+        active_projects = [p for p in processed_projects if p["estado"] == "En Curso"]
         projs_by_pm = defaultdict(list)
-        for p in processed_projects:
+        for p in active_projects:
             if p["pm"] != "Sin Asignar":
                 projs_by_pm[p["pm"]].append(p)
                 
@@ -567,8 +578,8 @@ class PlannerService:
                             "mensaje": f"⚠️ **Cierres Simultáneos:** El PM **{pm_name}** tiene asignados los proyectos **{p1['nombre']}** y **{p2['nombre']}** que finalizan con solo {diff} días de diferencia."
                         })
 
-        # Registrar alertas de choque con fechas críticas
-        for p in processed_projects:
+        # Registrar alertas de choque con fechas críticas (solo proyectos activos)
+        for p in active_projects:
             for col_fc in p["colisiones_fc"]:
                 alertas.append({
                     "tipo": "choque_fecha_critica",
