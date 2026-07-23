@@ -92,7 +92,7 @@ class PlannerService:
                 # Buscamos proyectos en Dataverse asignados a ese equipo
                 projects = DataverseClient.get(
                     "msdyn_projects", 
-                    {"$filter": f"_ownerid_value eq {team_id}", "$select": "msdyn_projectid,msdyn_subject,msdyn_progress,msdyn_scheduledstart,msdyn_finish,_createdby_value,_msdyn_projectmanager_value,statecode,statuscode"}, 
+                    {"$filter": f"_ownerid_value eq {team_id}", "$select": "msdyn_projectid,msdyn_subject,msdyn_progress,msdyn_scheduledstart,msdyn_taskearlieststart,msdyn_finish,_createdby_value,_msdyn_projectmanager_value,statecode,statuscode"}, 
                     get_all=True
                 )
                 for p in projects:
@@ -101,7 +101,7 @@ class PlannerService:
                     pm_id = manager_id if manager_id else creator_id
                     pm_name = cls.get_dataverse_user_name(pm_id)
 
-                    start = p.get("msdyn_scheduledstart")
+                    start = p.get("msdyn_taskearlieststart") or p.get("msdyn_scheduledstart")
                     finish = p.get("msdyn_finish")
                     if start: start = start.split('T')[0]
                     if finish: finish = finish.split('T')[0]
@@ -278,7 +278,7 @@ class PlannerService:
     @classmethod
     def _get_premium_plan_details(cls, plan_id: str) -> dict:
         # 1. Metadatos del proyecto
-        proj_data = DataverseClient.get(f"msdyn_projects({plan_id})", {"$select": "msdyn_projectid,msdyn_subject,msdyn_progress,msdyn_scheduledstart,msdyn_finish,msdyn_duration,_msdyn_projectmanager_value,_createdby_value"})
+        proj_data = DataverseClient.get(f"msdyn_projects({plan_id})", {"$select": "msdyn_projectid,msdyn_subject,msdyn_progress,msdyn_scheduledstart,msdyn_taskearlieststart,msdyn_finish,msdyn_duration,_msdyn_projectmanager_value,_createdby_value"})
         
         # 2. Obtener tareas
         filter_str = f"_msdyn_project_value eq {plan_id}"
@@ -340,7 +340,7 @@ class PlannerService:
         pm_id = manager_id if manager_id else creator_id
         pm_name = cls.get_dataverse_user_name(pm_id)
 
-        start_date = proj_data.get('msdyn_scheduledstart')
+        start_date = proj_data.get('msdyn_taskearlieststart') or proj_data.get('msdyn_scheduledstart')
         finish_date = proj_data.get('msdyn_finish')
         if start_date: start_date = start_date.split('T')[0]
         if finish_date: finish_date = finish_date.split('T')[0]
@@ -536,7 +536,7 @@ class PlannerService:
 
             processed_projects.append({
                 "id": pid,
-                "nombre": cat_entry.get("nombre_oficial", proj.get("name")),
+                "nombre": cat_entry.get("nombre_oficial") or proj.get("name"),
                 "start": p_start,
                 "finish": p_effective_finish,
                 "planned_finish": p_planned_finish,
