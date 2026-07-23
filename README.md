@@ -113,5 +113,34 @@ Añadir al bloque `"mcp"` de `~/.config/opencode/opencode.json`:
 ### Herramientas Disponibles
 * `list_authorized_plans`: Lista los planes autorizados del grupo, enriquecidos ahora con `estado_base` (`No Iniciado`, `En Curso`, `Finalizado`) y `estado_nativo` (obtenido directamente a través de `statecode`/`statuscode` desde Dataverse para proyectos Premium, o "Active" para Standard).
 * `get_plan_detailed_wbs`: Obtiene tareas, dependencias, avances y personas asignadas de un plan.
+* `get_plan_health_metrics`: Retorna los indicadores clave de salud de un plan (Avance Real Ponderado, Avance Esperado, Delta y Semáforo).
 * `get_overdue_tasks`: Escanea tareas vencidas.
 * `get_workload_summary`: Calcula la carga de trabajo de tareas activas por persona asignada.
+* `get_portfolio_macro_roadmap`: Analiza el portafolio unificado cruzando iniciativas con el catálogo y configuración corporativa para generar el roadmap macro, densidad de cierres y colisiones.
+
+---
+
+## Changelog
+
+### 2026-07-22
+- **fix**: Usa `msdyn_taskearlieststart` como fecha de inicio real de proyectos Premium, con fallback a `msdyn_scheduledstart`. Corrige la visualización en 24 de 35 proyectos que mostraban fecha de inicio incorrecta (2025-10-23).
+- **fix**: Resolución de nombres de proyecto con `or` en vez de default parameter para manejar strings vacíos en el catálogo.
+- Se agregan las herramientas `get_plan_health_metrics` y `get_portfolio_macro_roadmap` a la documentación de herramientas MCP disponibles.
+
+
+---
+
+## Changelog
+
+### 2026-07-22
+- **fix**: Usa `msdyn_taskearlieststart` como fecha de inicio real de proyectos Premium, con fallback a `msdyn_scheduledstart`. Corrige la visualización en 24 de 35 proyectos que mostraban fecha de inicio incorrecta (2025-10-23 — fecha default del tenant).
+- **fix**: Resolución de nombres de proyecto con `or` en vez de default parameter para manejar strings vacíos en el catálogo.
+- **docs**: Se agregan las herramientas `get_plan_health_metrics` y `get_portfolio_macro_roadmap` a la documentación de herramientas MCP disponibles.
+
+### Herramientas MCP (actualización)
+* `list_authorized_plans`: Lista los planes autorizados del grupo.
+* `get_plan_detailed_wbs`: Obtiene tareas, dependencias, avances y personas asignadas de un plan.
+* `get_plan_health_metrics`: Retorna indicadores clave de salud (Avance Real Ponderado, Avance Esperado, Delta y Semáforo).
+* `get_overdue_tasks`: Escanea tareas vencidas.
+* `get_workload_summary`: Calcula la carga de trabajo por persona asignada.
+* `get_portfolio_macro_roadmap`: Genera el roadmap macro del portafolio con alertas de colisión y congestión.
